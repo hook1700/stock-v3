@@ -55,7 +55,7 @@ func (s *TaskScheduler) Start() error {
 	// 添加每日数据更新任务
 	dailyUpdateTime := s.config.Strategy.DailyUpdateTime
 	if dailyUpdateTime == "" {
-		dailyUpdateTime = "17:45"
+		dailyUpdateTime = "18:30"
 	}
 
 	dailyCronSpec, err := parseTimeToCronSpec(dailyUpdateTime)
@@ -71,7 +71,7 @@ func (s *TaskScheduler) Start() error {
 	// 添加策略执行任务
 	strategyRunTime := s.config.Strategy.StrategyRunTime
 	if strategyRunTime == "" {
-		strategyRunTime = "18:00"
+		strategyRunTime = "19:00"
 	}
 
 	strategyCronSpec, err := parseTimeToCronSpec(strategyRunTime)
