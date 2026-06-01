@@ -7,9 +7,9 @@ WORKDIR /app
 ENV GOPROXY=https://goproxy.cn,direct
 ENV GOSUMDB=off
 
-# 复制依赖文件
-COPY go.mod go.sum ./
-# 先同步依赖关系，再下载
+# 复制依赖文件（不复制 go.sum，让它重新生成）
+COPY go.mod ./
+# 先同步依赖关系，再下载（会自动生成正确的 go.sum）
 RUN go mod tidy && go mod download
 
 # 复制源码
