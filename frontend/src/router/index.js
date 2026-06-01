@@ -3,7 +3,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 // 导入页面组件
 import Dashboard from '../views/Dashboard.vue'
 import StockList from '../views/stocks/StockList.vue'
-import StockSearch from '../views/stocks/StockSearch.vue'
 import Industries from '../views/stocks/Industries.vue'
 import ShortTermStrategy from '../views/strategies/ShortTermStrategy.vue'
 import MediumTermStrategy from '../views/strategies/MediumTermStrategy.vue'
@@ -40,15 +39,6 @@ const routes = [
     meta: {
       title: '股票列表',
       icon: 'List'
-    }
-  },
-  {
-    path: '/stocks/search',
-    name: 'StockSearch',
-    component: StockSearch,
-    meta: {
-      title: '股票搜索',
-      icon: 'Search'
     }
   },
   {
