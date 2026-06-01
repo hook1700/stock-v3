@@ -3,7 +3,6 @@ package strategy
 import (
 	"fmt"
 	"math"
-	"time"
 
 	"stock-strategy-backend/model"
 )
@@ -112,7 +111,7 @@ func (s *MediumTermStrategy) executeIndustryGrowthStrategy(stock *model.Stock, d
 	}
 
 	// 5. 计算评分
-	score := s.calculateIndustryGrowthScore(latestData, financialData, indicators)
+	score := s.calculateIndustryGrowthScore(latestData, dailyData, financialData, indicators)
 
 	if score < 0.6 {
 		return nil
@@ -164,7 +163,7 @@ func (s *MediumTermStrategy) executeTurnaroundStrategy(stock *model.Stock, daily
 	}
 
 	// 5. 计算评分
-	score := s.calculateTurnaroundScore(latestData, financialData, indicators)
+	score := s.calculateTurnaroundScore(latestData, dailyData, financialData, indicators)
 
 	if score < 0.6 {
 		return nil
@@ -221,7 +220,7 @@ func (s *MediumTermStrategy) executeDividendStrategy(stock *model.Stock, dailyDa
 	}
 
 	// 6. 计算评分
-	score := s.calculateDividendScore(latestData, financialData, indicators)
+	score := s.calculateDividendScore(latestData, dailyData, financialData, indicators)
 
 	if score < 0.6 {
 		return nil
@@ -301,8 +300,8 @@ func (s *MediumTermStrategy) checkPlatformBreakout(dailyData []model.StockDailyD
 	platformEnd := len(dailyData) - 20
 	platformData := dailyData[platformStart:platformEnd]
 
-	// 计算平台高低点
-	platformHigh, platformLow := s.findPlatformRange(platformData)
+	// 计算平台高点
+	platformHigh, _ := s.findPlatformRange(platformData)
 
 	// 检查是否突破平台
 	latestData := dailyData[len(dailyData)-1]
@@ -530,7 +529,7 @@ func (s *MediumTermStrategy) calculateStopLossPrice(dailyData []model.StockDaily
 }
 
 // calculateIndustryGrowthScore 计算行业成长策略评分
-func (s *MediumTermStrategy) calculateIndustryGrowthScore(data model.StockDailyData, financialData *model.FinancialData, indicators []model.TechnicalIndicator) float64 {
+func (s *MediumTermStrategy) calculateIndustryGrowthScore(data model.StockDailyData, dailyData []model.StockDailyData, financialData *model.FinancialData, indicators []model.TechnicalIndicator) float64 {
 	score := 0.5
 
 	// 基本面评分
@@ -562,7 +561,7 @@ func (s *MediumTermStrategy) calculateIndustryGrowthScore(data model.StockDailyD
 }
 
 // calculateTurnaroundScore 计算困境反转策略评分
-func (s *MediumTermStrategy) calculateTurnaroundScore(data model.StockDailyData, financialData *model.FinancialData, indicators []model.TechnicalIndicator) float64 {
+func (s *MediumTermStrategy) calculateTurnaroundScore(data model.StockDailyData, dailyData []model.StockDailyData, financialData *model.FinancialData, indicators []model.TechnicalIndicator) float64 {
 	score := 0.5
 
 	// 调整幅度评分
@@ -585,7 +584,7 @@ func (s *MediumTermStrategy) calculateTurnaroundScore(data model.StockDailyData,
 }
 
 // calculateDividendScore 计算高股息策略评分
-func (s *MediumTermStrategy) calculateDividendScore(data model.StockDailyData, financialData *model.FinancialData, indicators []model.TechnicalIndicator) float64 {
+func (s *MediumTermStrategy) calculateDividendScore(data model.StockDailyData, dailyData []model.StockDailyData, financialData *model.FinancialData, indicators []model.TechnicalIndicator) float64 {
 	score := 0.5
 
 	// 股息率评分

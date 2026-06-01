@@ -2,9 +2,7 @@ package strategy
 
 import (
 	"fmt"
-	"log"
 	"math"
-	"time"
 
 	"stock-strategy-backend/model"
 )
@@ -437,7 +435,7 @@ func (s *ShortTermStrategy) calculateMAPullbackScore(data model.StockDailyData, 
 	}
 
 	// 成交量配合加分
-	if data.Volume > data.Amount/float64(data.ClosePrice)*0.8 { // 简化成交量判断
+	if float64(data.Volume) > data.Amount/float64(data.ClosePrice)*0.8 { // 简化成交量判断
 		score += 0.1
 	}
 

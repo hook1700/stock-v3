@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -198,14 +197,57 @@ func containsString(s, substr string) bool {
 	return false
 }
 
-// RegisterStockRoutes 注册股票相关路由
-func RegisterStockRoutes(router *gin.Engine) {
-	handler := NewStockHandler()
-
-	stockGroup := router.Group("/api/stocks")
-	{
-		stockGroup.POST("/list", handler.GetStockList)
-		stockGroup.GET("/:code", handler.GetStockDetail)
-		stockGroup.GET("/:code/history", handler.GetStockHistory)
+// GetIndustries 获取行业列表
+func (h *StockHandler) GetIndustries(c *gin.Context) {
+	stocks, err := h.stockRepo.GetAllStocks()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取行业列表失败"})
+		return
 	}
+
+	industryMap := make(map[string]bool)
+	for _, stock := range stocks {
+		if stock.Industry != "" {
+			industryMap[stock.Industry] = true
+		}
+	}
+
+	var industries []string
+	for industry := range industryMap {
+		industries = append(industries, industry)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"industries": industries, "count": len(industries)})
+}
+
+// SearchStocks 搜索股票
+func (h *StockHandler) SearchStocks(c *gin.Context) {
+	keyword := c.Query("keyword")
+	if keyword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "搜索关键词不能为空"})
+		return
+	}
+
+	stocks, err := h.stockRepo.GetAllStocks()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "搜索股票失败"})
+		return
+	}
+
+	var results []model.StockListItem
+	for _, stock := range stocks {
+		if containsString(stock.Name, keyword) || containsString(stock.Code, keyword) {
+			item := model.StockListItem{
+				Code:     stock.Code,
+				Name:     stock.Name,
+				Industry: stock.Industry,
+			}
+			results = append(results, item)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"stocks": results,
+		"count":  len(results),
+	})
 }

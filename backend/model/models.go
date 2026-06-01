@@ -69,6 +69,7 @@ type Strategy struct {
 type StrategyResult struct {
 	ID               uint      `gorm:"primary_key" json:"id"`
 	StrategyID       string    `gorm:"index" json:"strategy_id"`
+	StrategyType     string    `gorm:"index" json:"strategy_type"`     // 策略类型：short_term, medium_term, long_term
 	TradeDate        time.Time `gorm:"index" json:"trade_date"`
 	StockCode        string    `gorm:"index" json:"stock_code"`
 	Score            float64   `gorm:"type:decimal(8,4)" json:"score"`
@@ -100,6 +101,38 @@ type UserOperation struct {
 	Parameters    string    `gorm:"type:jsonb" json:"parameters"`
 	ResultCount   int       `json:"result_count"`
 	CreatedAt     time.Time `gorm:"index" json:"created_at"`
+}
+
+// FinancialData 财务数据
+type FinancialData struct {
+	ID                uint      `gorm:"primary_key" json:"id"`
+	StockCode         string    `gorm:"type:varchar(20);index" json:"stock_code"`
+	Quarter           string    `gorm:"type:varchar(10);index" json:"quarter"` // 例如: 2024Q1
+	ReportDate        time.Time `json:"report_date"`
+	
+	// 盈利能力
+	ROE               float64   `gorm:"type:decimal(8,4)" json:"roe"`                // 净资产收益率
+	ROA               float64   `gorm:"type:decimal(8,4)" json:"roa"`                // 总资产收益率
+	GrossMargin       float64   `gorm:"type:decimal(8,4)" json:"gross_margin"`       // 毛利率
+	NetMargin         float64   `gorm:"type:decimal(8,4)" json:"net_margin"`        // 净利率
+	
+	// 成长性
+	RevenueGrowth     float64   `gorm:"type:decimal(8,4)" json:"revenue_growth"`     // 营收增长率
+	ProfitGrowth     float64   `gorm:"type:decimal(8,4)" json:"profit_growth"`     // 利润增长率
+	LastQuarterGrowth float64   `gorm:"type:decimal(8,4)" json:"last_quarter_growth"` // 最近季度增长
+	
+	// 财务健康
+	DebtRatio         float64   `gorm:"type:decimal(8,4)" json:"debt_ratio"`         // 资产负债率
+	CurrentRatio      float64   `gorm:"type:decimal(8,4)" json:"current_ratio"`      // 流动比率
+	CashFlow          float64   `gorm:"type:decimal(15,2)" json:"cash_flow"`        // 经营现金流
+	
+	// 估值与分红
+	DividendYield    float64   `gorm:"type:decimal(8,4)" json:"dividend_yield"`    // 股息率
+	PE               float64   `gorm:"type:decimal(10,4)" json:"pe"`               // 市盈率
+	PB               float64   `gorm:"type:decimal(10,4)" json:"pb"`               // 市净率
+	
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // StockFilterRequest 股票筛选请求

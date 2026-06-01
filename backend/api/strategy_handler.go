@@ -186,15 +186,57 @@ func (h *StrategyHandler) buildResultItems(results []model.StrategyResult) []mod
 	return items
 }
 
-// RegisterStrategyRoutes 注册策略相关路由
-func RegisterStrategyRoutes(router *gin.Engine) {
-	handler := NewStrategyHandler()
+// GetStrategiesByType 按类型获取策略
+func (h *StrategyHandler) GetStrategiesByType(c *gin.Context) {
+	strategyType := c.Param("type")
 
-	strategyGroup := router.Group("/api/strategies")
-	{
-		strategyGroup.GET("", handler.GetStrategies)
-		strategyGroup.GET("/:strategy_id/results", handler.GetStrategyResults)
-		strategyGroup.POST("/:strategy_id/run", handler.RunStrategy)
-		strategyGroup.GET("/:strategy_id/history", handler.GetStrategyHistory)
+	strategies, err := h.strategyRepo.GetEnabledStrategies()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取策略列表失败"})
+		return
 	}
+
+	var filtered []model.Strategy
+	for _, s := range strategies {
+		if s.StrategyType == strategyType {
+			filtered = append(filtered, s)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"strategies": filtered,
+		"type":       strategyType,
+		"count":      len(filtered),
+	})
+}
+
+// UpdateStrategyStatus 更新策略状态
+func (h *StrategyHandler) UpdateStrategyStatus(c *gin.Context) {
+	strategyID := c.Param("strategy_id")
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
+
+	strategy, err := h.strategyRepo.GetStrategyByID(strategyID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "策略不存在"})
+		return
+	}
+
+	strategy.Enabled = req.Enabled
+	if err := model.DB.Save(strategy).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新策略状态失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "策略状态更新成功",
+		"strategy_id": strategyID,
+		"enabled":     req.Enabled,
+	})
 }
