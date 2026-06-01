@@ -54,11 +54,27 @@ check_environment() {
     check_command docker
 
     # 检查Docker Compose
-    check_command docker-compose
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    elif docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+    else
+        log_error "未安装 docker-compose，请先安装"
+        exit 1
+    fi
 
-    # 检查是否在项目根目录
-    if [ ! -f "docker-compose.yml" ]; then
-        log_error "请在项目根目录运行此脚本"
+    # 检查是否在 deploy 目录或项目根目录
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+    if [ -f "$SCRIPT_DIR/docker-compose.yml" ]; then
+        COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+        log_info "使用部署目录的 docker-compose.yml"
+    elif [ -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yml"
+        log_info "使用项目根的 docker-compose.yml"
+    else
+        log_error "找不到 docker-compose.yml"
         exit 1
     fi
 
@@ -69,9 +85,12 @@ check_environment() {
 create_configs() {
     log_info "创建配置文件..."
 
+    # 切换到项目根目录（deploy 的上一级）
+    cd "$(dirname "$COMPOSE_FILE")/.."
+
     # 创建后端配置文件
-    if [ ! -f "../backend/config.yaml" ]; then
-        cat > ../backend/config.yaml << EOF
+    if [ ! -f "backend/config.yaml" ]; then
+        cat > backend/config.yaml << EOF
 server:
   port: "8080"
   mode: "production"
@@ -100,8 +119,8 @@ EOF
     fi
 
     # 创建前端环境变量
-    if [ ! -f "../frontend/.env.production" ]; then
-        cat > ../frontend/.env.production << EOF
+    if [ ! -f "frontend/.env.production" ]; then
+        cat > frontend/.env.production << EOF
 VITE_API_BASE_URL=http://localhost:8080/api
 VITE_APP_TITLE=股票策略分析系统
 EOF
@@ -114,17 +133,11 @@ EOF
 build_images() {
     log_info "构建Docker镜像..."
 
-    # 构建后端镜像
-    log_info "构建后端镜像..."
-    docker build -t stock-strategy-backend:latest ../backend
+    # 切换到 compose 文件所在目录
+    cd "$(dirname "$COMPOSE_FILE")"
 
-    # 构建前端镜像
-    log_info "构建前端镜像..."
-    docker build -t stock-strategy-frontend:latest ../frontend
-
-    # 构建数据采集镜像
-    log_info "构建数据采集镜像..."
-    docker build -t stock-data-collector:latest ../data/python
+    # 使用 docker-compose 构建（复用 compose 文件中的 build 配置）
+    $COMPOSE_CMD -f "$COMPOSE_FILE" build
 
     log_info "镜像构建完成"
 }
@@ -133,8 +146,11 @@ build_images() {
 start_services() {
     log_info "启动服务..."
 
+    # 切换到 compose 文件所在目录
+    cd "$(dirname "$COMPOSE_FILE")"
+
     # 启动数据库和缓存
-    docker-compose up -d postgres redis
+    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d postgres redis
 
     # 等待数据库启动
     log_info "等待数据库启动..."
@@ -142,10 +158,10 @@ start_services() {
 
     # 初始化数据库
     log_info "初始化数据库..."
-    docker-compose exec postgres psql -U postgres -d stock_strategy -f /docker-entrypoint-initdb.d/init.sql
+    $COMPOSE_CMD -f "$COMPOSE_FILE" exec postgres psql -U postgres -d stock_strategy -f /docker-entrypoint-initdb.d/init.sql
 
     # 启动其他服务
-    docker-compose up -d
+    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d
 
     log_info "服务启动完成"
 }
@@ -153,21 +169,21 @@ start_services() {
 # 停止服务
 stop_services() {
     log_info "停止服务..."
-    docker-compose down
+    $COMPOSE_CMD -f "$COMPOSE_FILE" down
     log_info "服务已停止"
 }
 
 # 重启服务
 restart_services() {
     log_info "重启服务..."
-    docker-compose restart
+    $COMPOSE_CMD -f "$COMPOSE_FILE" restart
     log_info "服务已重启"
 }
 
 # 查看日志
 show_logs() {
     log_info "显示服务日志..."
-    docker-compose logs -f
+    $COMPOSE_CMD -f "$COMPOSE_FILE" logs -f
 }
 
 # 备份数据
@@ -178,18 +194,21 @@ backup_data() {
     BACKUP_DIR="backup/$(date +%Y%m%d_%H%M%S)"
     mkdir -p $BACKUP_DIR
 
+    # 切换到 compose 文件所在目录
+    cd "$(dirname "$COMPOSE_FILE")"
+
     # 备份数据库
     log_info "备份数据库..."
-    docker-compose exec postgres pg_dump -U postgres stock_strategy > $BACKUP_DIR/database.sql
+    $COMPOSE_CMD -f "$COMPOSE_FILE" exec -T postgres pg_dump -U postgres stock_strategy > $BACKUP_DIR/database.sql
 
     # 备份Redis数据
     log_info "备份Redis数据..."
-    docker-compose exec redis redis-cli save
+    $COMPOSE_CMD -f "$COMPOSE_FILE" exec -T redis redis-cli save
     docker cp stock-strategy-redis:/data/dump.rdb $BACKUP_DIR/redis.rdb
 
     # 备份配置文件
-    cp -r ../backend/config.yaml $BACKUP_DIR/
-    cp -r ../frontend/.env.production $BACKUP_DIR/
+    cp -r ../backend/config.yaml $BACKUP_DIR/ 2>/dev/null || true
+    cp -r ../frontend/.env.production $BACKUP_DIR/ 2>/dev/null || true
 
     # 压缩备份文件
     tar -czf $BACKUP_DIR.tar.gz $BACKUP_DIR
@@ -206,8 +225,11 @@ clean_system() {
     if [[ "$response" =~ ^[Yy]$ ]]; then
         log_info "清理系统..."
 
+        # 切换到 compose 文件所在目录
+        cd "$(dirname "$COMPOSE_FILE")"
+
         # 停止并删除容器
-        docker-compose down -v
+        $COMPOSE_CMD -f "$COMPOSE_FILE" down -v
 
         # 删除镜像
         docker rmi stock-strategy-backend:latest stock-strategy-frontend:latest stock-data-collector:latest || true
@@ -225,12 +247,14 @@ clean_system() {
 health_check() {
     log_info "执行健康检查..."
 
+    cd "$(dirname "$COMPOSE_FILE")"
+
     # 检查服务状态
-    if docker-compose ps | grep -q "Up"; then
+    if $COMPOSE_CMD -f "$COMPOSE_FILE" ps | grep -q "Up"; then
         log_info "所有服务运行正常"
     else
         log_error "部分服务运行异常"
-        docker-compose ps
+        $COMPOSE_CMD -f "$COMPOSE_FILE" ps
         exit 1
     fi
 
