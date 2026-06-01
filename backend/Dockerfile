@@ -9,7 +9,8 @@ ENV GOSUMDB=off
 
 # 复制依赖文件
 COPY go.mod go.sum ./
-RUN go mod download
+# 先同步依赖关系，再下载
+RUN go mod tidy && go mod download
 
 # 复制源码
 COPY . .
