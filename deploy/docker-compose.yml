@@ -9,11 +9,14 @@ services:
       POSTGRES_DB: stock_strategy
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
+      TZ: Asia/Shanghai
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../database/schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - stock-network
 
@@ -21,10 +24,14 @@ services:
   redis:
     image: redis:7-alpine
     container_name: stock-strategy-redis
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - stock-network
 
@@ -42,9 +49,12 @@ services:
       - DB_NAME=stock_strategy
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - TZ=Asia/Shanghai
     volumes:
       - ../data/python:/app
       - ./logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - postgres
       - redis
@@ -57,6 +67,7 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+    image: stock-strategy-backend:latest
     container_name: stock-strategy-backend
     environment:
       - DB_HOST=postgres
@@ -68,10 +79,13 @@ services:
       - REDIS_PORT=6379
       - SERVER_PORT=8080
       - SERVER_MODE=production
+      - TZ=Asia/Shanghai
     ports:
       - "8080:8080"
     volumes:
       - ./logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - postgres
       - redis
@@ -87,8 +101,13 @@ services:
       args:
         - VITE_API_BASE_URL=http://localhost:8080/api
     container_name: stock-strategy-frontend
+    environment:
+      - TZ=Asia/Shanghai
     ports:
       - "3000:3000"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - backend
     networks:
@@ -99,6 +118,8 @@ services:
   nginx:
     image: nginx:alpine
     container_name: stock-strategy-nginx
+    environment:
+      - TZ=Asia/Shanghai
     ports:
       - "80:80"
       - "443:443"
@@ -106,6 +127,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./ssl:/etc/nginx/ssl
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - backend
       - frontend
