@@ -8,22 +8,25 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"stock-strategy-backend/config"
+	"stock-strategy-backend/model"
 	"stock-strategy-backend/strategy"
 )
 
 // TaskScheduler 任务调度器
 type TaskScheduler struct {
-	cron      *cron.Cron
-	config    *config.Config
-	engine    *strategy.StrategyEngine
+	cron         *cron.Cron
+	config       *config.Config
+	engine       *strategy.StrategyEngine
+	strategyRepo *model.StrategyRepository
 }
 
 // NewTaskScheduler 创建任务调度器
 func NewTaskScheduler(cfg *config.Config) *TaskScheduler {
 	return &TaskScheduler{
-		cron:   cron.New(),
-		config: cfg,
-		engine: strategy.NewStrategyEngine(),
+		cron:         cron.New(),
+		config:       cfg,
+		engine:       strategy.NewStrategyEngine(),
+		strategyRepo: &model.StrategyRepository{},
 	}
 }
 
@@ -44,6 +47,11 @@ func parseTimeToCronSpec(timeStr string) (string, error) {
 
 // Start 启动任务调度器
 func (s *TaskScheduler) Start() error {
+	// 先初始化数据库中的默认策略（如果不存在）
+	if err := s.initDefaultStrategies(); err != nil {
+		log.Printf("初始化默认策略失败: %v", err)
+	}
+
 	// 添加每日数据更新任务
 	dailyUpdateTime := s.config.Strategy.DailyUpdateTime
 	if dailyUpdateTime == "" {
@@ -93,6 +101,35 @@ func (s *TaskScheduler) Stop() {
 	}
 }
 
+// initDefaultStrategies 初始化默认策略到数据库
+func (s *TaskScheduler) initDefaultStrategies() error {
+	defaultStrategies := []model.Strategy{
+		{StrategyID: "short_term_1", Name: "短线策略1-均线回踩", StrategyType: "short_term", Description: "短期均线回踩买入策略", Enabled: true},
+		{StrategyID: "short_term_2", Name: "短线策略2-突破回踩", StrategyType: "short_term", Description: "短期突破回踩策略", Enabled: true},
+		{StrategyID: "short_term_3", Name: "短线策略3-强势股反弹", StrategyType: "short_term", Description: "短期强势股反弹策略", Enabled: true},
+		{StrategyID: "medium_term_1", Name: "中线策略1-均线回踩", StrategyType: "medium_term", Description: "中期均线回踩买入策略", Enabled: true},
+		{StrategyID: "medium_term_2", Name: "中线策略2-突破回踩", StrategyType: "medium_term", Description: "中期突破回踩策略", Enabled: true},
+		{StrategyID: "medium_term_3", Name: "中线策略3-强势股反弹", StrategyType: "medium_term", Description: "中期强势股反弹策略", Enabled: true},
+		{StrategyID: "long_term_1", Name: "长线策略1-均线回踩", StrategyType: "long_term", Description: "长期均线回踩买入策略", Enabled: true},
+		{StrategyID: "long_term_2", Name: "长线策略2-突破回踩", StrategyType: "long_term", Description: "长期突破回踩策略", Enabled: true},
+		{StrategyID: "long_term_3", Name: "长线策略3-强势股反弹", StrategyType: "long_term", Description: "长期强势股反弹策略", Enabled: true},
+	}
+
+	for _, st := range defaultStrategies {
+		_, err := s.strategyRepo.GetStrategyByID(st.StrategyID)
+		if err != nil {
+			// 策略不存在，创建默认策略
+			if err := s.strategyRepo.CreateStrategy(&st); err != nil {
+				log.Printf("创建默认策略 %s 失败: %v", st.StrategyID, err)
+			} else {
+				log.Printf("创建默认策略: %s", st.StrategyID)
+			}
+		}
+	}
+
+	return nil
+}
+
 // dailyDataUpdateTask 每日数据更新任务
 func (s *TaskScheduler) dailyDataUpdateTask() {
 	if s.config.Strategy.WeekendSkip && isWeekend(time.Now()) {
@@ -118,23 +155,28 @@ func (s *TaskScheduler) strategyExecutionTask() {
 
 	tradeDate := time.Now()
 
-	// 获取所有启用的策略并执行
-	strategies := []string{
-		"short_term_1", "short_term_2", "short_term_3",
-		"medium_term_1", "medium_term_2", "medium_term_3",
-		"long_term_1", "long_term_2", "long_term_3",
+	// 从数据库获取所有启用的策略
+	strategies, err := s.strategyRepo.GetEnabledStrategies()
+	if err != nil {
+		log.Printf("获取策略列表失败: %v", err)
+		return
+	}
+
+	if len(strategies) == 0 {
+		log.Println("没有启用的策略，跳过执行")
+		return
 	}
 
 	successCount := 0
 	errorCount := 0
 
-	for _, strategyID := range strategies {
-		err := s.engine.ExecuteStrategy(strategyID, tradeDate)
+	for _, strategy := range strategies {
+		err := s.engine.ExecuteStrategy(strategy.StrategyID, tradeDate)
 		if err != nil {
-			log.Printf("策略 %s 执行失败: %v", strategyID, err)
+			log.Printf("策略 %s 执行失败: %v", strategy.StrategyID, err)
 			errorCount++
 		} else {
-			log.Printf("策略 %s 执行成功", strategyID)
+			log.Printf("策略 %s 执行成功", strategy.StrategyID)
 			successCount++
 		}
 	}
@@ -166,19 +208,25 @@ func (s *TaskScheduler) RunStrategyImmediately(strategyID string) error {
 func (s *TaskScheduler) RunAllStrategiesImmediately() error {
 	log.Println("立即执行所有策略")
 
-	strategies := []string{
-		"short_term_1", "short_term_2", "short_term_3",
-		"medium_term_1", "medium_term_2", "medium_term_3",
-		"long_term_1", "long_term_2", "long_term_3",
+	// 从数据库获取所有启用的策略
+	strategies, err := s.strategyRepo.GetEnabledStrategies()
+	if err != nil {
+		log.Printf("获取策略列表失败: %v", err)
+		return err
+	}
+
+	if len(strategies) == 0 {
+		log.Println("没有启用的策略")
+		return fmt.Errorf("没有启用的策略")
 	}
 
 	successCount := 0
 	errorCount := 0
 
-	for _, strategyID := range strategies {
-		err := s.engine.ExecuteStrategy(strategyID, time.Now())
+	for _, strategy := range strategies {
+		err := s.engine.ExecuteStrategy(strategy.StrategyID, time.Now())
 		if err != nil {
-			log.Printf("策略 %s 执行失败: %v", strategyID, err)
+			log.Printf("策略 %s 执行失败: %v", strategy.StrategyID, err)
 			errorCount++
 		} else {
 			successCount++

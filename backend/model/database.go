@@ -115,6 +115,10 @@ func (r *StrategyRepository) GetStrategyByID(strategyID string) (*Strategy, erro
 	return &strategy, err
 }
 
+func (r *StrategyRepository) CreateStrategy(strategy *Strategy) error {
+	return DB.Create(strategy).Error
+}
+
 // StrategyResultRepository 策略结果仓库
 type StrategyResultRepository struct{}
 
