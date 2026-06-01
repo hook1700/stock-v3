@@ -63,7 +63,7 @@ func (s *TaskScheduler) Start() error {
 		return err
 	}
 
-	_, err = s.cron.AddFunc("0 "+dailyCronSpec+" * * 1-5", s.dailyDataUpdateTask)
+	_, err = s.cron.AddFunc(dailyCronSpec+" * * 1-5", s.dailyDataUpdateTask)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func (s *TaskScheduler) Start() error {
 		return err
 	}
 
-	_, err = s.cron.AddFunc("0 "+strategyCronSpec+" * * 1-5", s.strategyExecutionTask)
+	_, err = s.cron.AddFunc(strategyCronSpec+" * * 1-5", s.strategyExecutionTask)
 	if err != nil {
 		return err
 	}
