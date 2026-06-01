@@ -47,6 +47,26 @@ func LoadConfig() (*Config, error) {
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath(".")
 
+	// 设置环境变量支持（优先级高于配置文件）
+	viper.AutomaticEnv()
+	viper.SetEnvPrefix("") // 无前缀，直接匹配环境变量名
+
+	// 绑定环境变量名（将 viper key 映射到环境变量名）
+	_ = viper.BindEnv("server.port", "SERVER_PORT")
+	_ = viper.BindEnv("server.mode", "SERVER_MODE")
+
+	_ = viper.BindEnv("database.host", "DB_HOST")
+	_ = viper.BindEnv("database.port", "DB_PORT")
+	_ = viper.BindEnv("database.user", "DB_USER")
+	_ = viper.BindEnv("database.password", "DB_PASSWORD")
+	_ = viper.BindEnv("database.dbname", "DB_NAME")
+	_ = viper.BindEnv("database.sslmode", "DB_SSLMODE")
+
+	_ = viper.BindEnv("redis.host", "REDIS_HOST")
+	_ = viper.BindEnv("redis.port", "REDIS_PORT")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	_ = viper.BindEnv("redis.db", "REDIS_DB")
+
 	// 设置默认值
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
@@ -59,6 +79,11 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("database.password", "password")
 	viper.SetDefault("database.dbname", "stock_strategy")
 	viper.SetDefault("database.sslmode", "disable")
+
+	viper.SetDefault("redis.host", "localhost")
+	viper.SetDefault("redis.port", "6379")
+	viper.SetDefault("redis.password", "")
+	viper.SetDefault("redis.db", 0)
 
 	viper.SetDefault("strategy.daily_update_time", "17:45")
 	viper.SetDefault("strategy.strategy_run_time", "18:00")
