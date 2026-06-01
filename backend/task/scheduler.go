@@ -3,6 +3,7 @@ package task
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -26,6 +27,21 @@ func NewTaskScheduler(cfg *config.Config) *TaskScheduler {
 	}
 }
 
+// parseTimeToCronSpec 将 "HH:MM" 格式时间转换为 cron 分钟和小时字段
+func parseTimeToCronSpec(timeStr string) (string, error) {
+	parts := strings.Split(timeStr, ":")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("无效的时间格式: %s，期望格式为 HH:MM", timeStr)
+	}
+	hour := parts[0]
+	minute := parts[1]
+	// 基本校验
+	if len(hour) == 0 || len(minute) == 0 {
+		return "", fmt.Errorf("无效的时间格式: %s", timeStr)
+	}
+	return minute + " " + hour, nil
+}
+
 // Start 启动任务调度器
 func (s *TaskScheduler) Start() error {
 	// 添加每日数据更新任务
@@ -34,7 +50,12 @@ func (s *TaskScheduler) Start() error {
 		dailyUpdateTime = "17:45"
 	}
 
-	_, err := s.cron.AddFunc("0 "+dailyUpdateTime+" * * 1-5", s.dailyDataUpdateTask)
+	dailyCronSpec, err := parseTimeToCronSpec(dailyUpdateTime)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.cron.AddFunc("0 "+dailyCronSpec+" * * 1-5", s.dailyDataUpdateTask)
 	if err != nil {
 		return err
 	}
@@ -45,7 +66,12 @@ func (s *TaskScheduler) Start() error {
 		strategyRunTime = "18:00"
 	}
 
-	_, err = s.cron.AddFunc("0 "+strategyRunTime+" * * 1-5", s.strategyExecutionTask)
+	strategyCronSpec, err := parseTimeToCronSpec(strategyRunTime)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.cron.AddFunc("0 "+strategyCronSpec+" * * 1-5", s.strategyExecutionTask)
 	if err != nil {
 		return err
 	}
