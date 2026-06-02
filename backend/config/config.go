@@ -85,8 +85,8 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 
-	viper.SetDefault("strategy.daily_update_time", "17:45")
-	viper.SetDefault("strategy.strategy_run_time", "18:00")
+	viper.SetDefault("strategy.daily_update_time", "17:30")
+	viper.SetDefault("strategy.strategy_run_time", "17:45")
 	viper.SetDefault("strategy.weekend_skip", true)
 
 	if err := viper.ReadInConfig(); err != nil {

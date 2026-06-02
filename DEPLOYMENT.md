@@ -136,8 +136,8 @@ redis:
 ### 策略执行时间配置
 ```yaml
 strategy:
-  daily_update_time: "9:25"    # 每日数据更新时间
-  strategy_run_time: "18:00"    # 策略执行时间
+  daily_update_time: "17.30"    # 每日数据更新时间
+  strategy_run_time: "17.45"    # 策略执行时间
   weekend_skip: true            # 周末跳过执行
 ```
 
