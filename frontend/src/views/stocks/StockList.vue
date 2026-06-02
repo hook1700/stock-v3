@@ -211,6 +211,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Timer } from '@element-plus/icons-vue'
+import { getStockList, getIndustries } from '../../api/index.js'
 
 const router = useRouter()
 
@@ -238,59 +239,57 @@ const loading = ref(false)
 const autoRefresh = ref(false)
 let refreshTimer = null
 
-// 模拟数据
-const mockStocks = Array.from({ length: 1000 }, (_, i) => ({
-  id: i + 1,
-  code: `000${i.toString().padStart(3, '0')}`,
-  name: `股票${i + 1}`,
-  industry: ['新能源', '半导体', '医药', '消费', '金融'][i % 5],
-  market: ['SH', 'SZ', 'CYB', 'KCB'][i % 4],
-  closePrice: 10 + Math.random() * 90,
-  changeRate: (Math.random() - 0.5) * 0.2,
-  amount: Math.random() * 1000000000,
-  turnoverRate: Math.random() * 0.1,
-  peRatio: Math.random() * 50,
-  pbRatio: Math.random() * 5
-}))
-
 // 方法
 const searchStocks = async () => {
   loading.value = true
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // 调用真实API
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+      code: filterForm.code || undefined,
+      name: filterForm.name || undefined,
+      industry: filterForm.industry || undefined,
+      market: filterForm.market || undefined,
+      min_amount: filterForm.minAmount > 0 ? filterForm.minAmount : undefined,
+      min_turnover: filterForm.minTurnover > 0 ? filterForm.minTurnover : undefined,
+      sort_by: filterForm.sortBy,
+      sort_order: filterForm.sortOrder
+    }
 
-    // 应用筛选条件
-    let filtered = mockStocks.filter(stock => {
-      return (
-        (!filterForm.code || stock.code.includes(filterForm.code)) &&
-        (!filterForm.name || stock.name.includes(filterForm.name)) &&
-        (!filterForm.industry || stock.industry === filterForm.industry) &&
-        (!filterForm.market || stock.market === filterForm.market) &&
-        stock.amount >= filterForm.minAmount &&
-        stock.turnoverRate >= filterForm.minTurnover
-      )
-    })
-
-    // 排序
-    filtered.sort((a, b) => {
-      const aValue = a[filterForm.sortBy]
-      const bValue = b[filterForm.sortBy]
-      if (filterForm.sortOrder === 'asc') {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
-      } else {
-        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
-      }
-    })
-
-    totalCount.value = filtered.length
-    const startIndex = (currentPage.value - 1) * pageSize.value
-    stockList.value = filtered.slice(startIndex, startIndex + pageSize.value)
+    const response = await getStockList(params)
+    
+    if (response && response.data) {
+      stockList.value = response.data.list || []
+      totalCount.value = response.data.total || 0
+    } else if (Array.isArray(response)) {
+      stockList.value = response
+      totalCount.value = response.length
+    } else {
+      stockList.value = []
+      totalCount.value = 0
+    }
 
   } catch (error) {
+    console.error('获取股票列表失败:', error)
     ElMessage.error('获取股票列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 初始化行业列表
+const initIndustries = async () => {
+  try {
+    const response = await getIndustries()
+    if (response && response.data) {
+      industries.value = response.data || []
+    } else if (Array.isArray(response)) {
+      industries.value = response
+    }
+  } catch (error) {
+    console.error('获取行业列表失败:', error)
+    ElMessage.error('获取行业列表失败')
   }
 }
 

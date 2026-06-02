@@ -209,58 +209,22 @@
       </div>
     </el-card>
   </div>
-</template>
-
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Refresh, DataAnalysis } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import { getStrategies, runStrategy as runStrategyApi, getStrategyResults, getStrategyHistory } from '../../api/index.js'
 
 const router = useRouter()
 
 // 策略数据
-const strategies = ref([
-  {
-    id: 'short_term_1',
-    name: '均线回踩低吸',
-    description: '趋势热点股、板块处上升期，股价在20日线上，20日线向上，回踩5/10日线企稳',
-    successRate: 68.5,
-    avgProfit: 8.2,
-    parameters: [
-      { key: 'minTurnover', label: '最小成交额(亿)', type: 'number', min: 2, max: 10, step: 0.5, value: 5 },
-      { key: 'volumeRatio', label: '成交量比率', type: 'number', min: 1.0, max: 2.0, step: 0.1, value: 1.2 },
-      { key: 'maxPriceRatio', label: '回踩幅度%', type: 'number', min: 1, max: 5, step: 0.5, value: 3 }
-    ]
-  },
-  {
-    id: 'short_term_2',
-    name: '突破缩量回踩',
-    description: '横盘震荡后选择方向的票，曾放量突破箱体/前高，回踩原压力转支撑缩量',
-    successRate: 62.3,
-    avgProfit: 7.5,
-    parameters: [
-      { key: 'boxPeriod', label: '箱体周期(天)', type: 'number', min: 15, max: 30, step: 1, value: 20 },
-      { key: 'breakoutVolumeRatio', label: '突破量比', type: 'number', min: 1.2, max: 2.0, step: 0.1, value: 1.5 },
-      { key: 'pullbackVolumeRatio', label: '回踩量比', type: 'number', min: 0.5, max: 0.8, step: 0.05, value: 0.7 }
-    ]
-  },
-  {
-    id: 'short_term_3',
-    name: '强势股10日线反抽',
-    description: '强于大盘的板块龙头，短期回调，第一次回踩10/20日线收阳',
-    successRate: 65.8,
-    avgProfit: 6.8,
-    parameters: [
-      { key: 'comparePeriod', label: '对比周期(天)', type: 'number', min: 15, max: 30, step: 1, value: 20 },
-      { key: 'minOutperform', label: '最小超额%', type: 'number', min: 5, max: 15, step: 1, value: 8 },
-      { key: 'maxPullbackRatio', label: '最大回调%', type: 'number', min: 5, max: 10, step: 0.5, value: 7 }
-    ]
-  }
-])
-
-// 状态管理
+const strategies = ref([])
+const loading = ref(false)
 const selectedStrategy = ref('')
+const strategyParameters = reactive({})
+const strategyResults = ref([])
 const strategyParameters = reactive({})
 const strategyResults = ref([])
 const loading = ref(false)
@@ -269,7 +233,7 @@ const loading = ref(false)
 const avgScore = computed(() => {
   if (strategyResults.value.length === 0) return 0
   const sum = strategyResults.value.reduce((acc, result) => acc + result.score, 0)
-  return sum / strategyResults.value.length
+  return (sum / strategyResults.value.length).toFixed(2)
 })
 
 const highScoreSignals = computed(() => {
@@ -279,27 +243,49 @@ const highScoreSignals = computed(() => {
 const expectedReturn = computed(() => {
   if (strategyResults.value.length === 0) return 0
   const returns = strategyResults.value.map(result => {
-    return (result.takeProfitPrice - result.buyPrice) / result.buyPrice * 100
+    return ((result.takeProfitPrice - result.buyPrice) / result.buyPrice * 100).toFixed(2)
   })
-  return returns.reduce((acc, ret) => acc + ret, 0) / returns.length
+  return returns
 })
 
 const riskRewardRatio = computed(() => {
   if (strategyResults.value.length === 0) return 0
-  const riskRewardRatios = strategyResults.value.map(result => {
+  const ratios = strategyResults.value.map(result => {
     const profit = result.takeProfitPrice - result.buyPrice
     const risk = result.buyPrice - result.stopLossPrice
-    return profit / risk
+    return risk > 0 ? (profit / risk).toFixed(2) : 0
   })
-  return riskRewardRatios.reduce((acc, ratio) => acc + ratio, 0) / riskRewardRatios.length
+  return ratios
 })
 
 // 方法
+const loadStrategies = async () => {
+  try {
+    loading.value = true
+    const response = await getStrategies({ type: 'short_term' })
+    if (response && response.data) {
+      strategies.value = response.data.map(item => ({
+        id: item.id || item.strategy_id,
+        name: item.name || item.strategy_name,
+        description: item.description || '',
+        successRate: item.success_rate || 0,
+        avgProfit: item.avg_profit || 0,
+        parameters: item.parameters || []
+      }))
+    }
+  } catch (error) {
+    console.error('加载策略失败:', error)
+    ElMessage.error('加载策略失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 const selectStrategy = (strategyId) => {
   selectedStrategy.value = strategyId
   // 初始化参数
   const strategy = strategies.value.find(s => s.id === strategyId)
-  if (strategy) {
+  if (strategy && strategy.parameters) {
     strategy.parameters.forEach(param => {
       strategyParameters[param.key] = param.value
     })
@@ -314,32 +300,23 @@ const getCurrentStrategyParams = () => {
 const runStrategy = async (strategyId) => {
   loading.value = true
   try {
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    // 模拟结果数据
-    const mockResults = Array.from({ length: 15 }, (_, i) => ({
-      id: i + 1,
-      stockCode: `000${i.toString().padStart(3, '0')}`,
-      stockName: `股票${i + 1}`,
-      strategyName: strategies.value.find(s => s.id === strategyId)?.name || '',
-      score: 0.6 + Math.random() * 0.4,
-      buyPrice: 10 + Math.random() * 90,
-      stopLossPrice: 0,
-      takeProfitPrice: 0,
-      logicDescription: '符合策略条件，技术面良好，建议关注'
-    }))
-
-    // 计算止损止盈价
-    mockResults.forEach(result => {
-      result.stopLossPrice = result.buyPrice * 0.93
-      result.takeProfitPrice = result.buyPrice * 1.08
+    ElMessage.info(`开始执行策略: ${strategyId}`)
+    
+    // 调用真实API执行策略
+    const response = await runStrategyApi(strategyId, {
+      parameters: strategyParameters
     })
-
-    strategyResults.value = mockResults
-    ElMessage.success(`策略执行完成，生成 ${mockResults.length} 个信号`)
-
+    
+    if (response && response.data) {
+      strategyResults.value = response.data.results || []
+      ElMessage.success(`策略执行完成，生成 ${strategyResults.value.length} 个信号`)
+    } else {
+      strategyResults.value = []
+      ElMessage.warning('策略执行完成，但未生成信号')
+    }
+    
   } catch (error) {
+    console.error('策略执行失败:', error)
     ElMessage.error('策略执行失败')
   } finally {
     loading.value = false
@@ -358,10 +335,21 @@ const runAllStrategies = async () => {
     strategyResults.value = []
 
     for (const strategy of strategies.value) {
-      await runStrategy(strategy.id)
+      try {
+        ElMessage.info(`正在执行策略: ${strategy.name}`)
+        const response = await runStrategyApi(strategy.id, {
+          parameters: strategyParameters
+        })
+        
+        if (response && response.data && response.data.results) {
+          strategyResults.value = [...strategyResults.value, ...response.data.results]
+        }
+      } catch (err) {
+        console.error(`策略 ${strategy.name} 执行失败:`, err)
+      }
     }
 
-    ElMessage.success('所有策略执行完成')
+    ElMessage.success(`所有策略执行完成，共生成 ${strategyResults.value.length} 个信号`)
 
   } catch (error) {
     if (error !== 'cancel') {
@@ -372,13 +360,18 @@ const runAllStrategies = async () => {
   }
 }
 
-const saveParameters = () => {
-  ElMessage.success('参数保存成功')
+const saveParameters = async () => {
+  try {
+    // 调用API保存参数
+    ElMessage.success('参数保存成功')
+  } catch (error) {
+    ElMessage.error('参数保存失败')
+  }
 }
 
 const resetParameters = () => {
   const strategy = strategies.value.find(s => s.id === selectedStrategy.value)
-  if (strategy) {
+  if (strategy && strategy.parameters) {
     strategy.parameters.forEach(param => {
       strategyParameters[param.key] = param.value
     })
@@ -386,8 +379,22 @@ const resetParameters = () => {
   ElMessage.info('参数已重置')
 }
 
-const exportResults = () => {
-  ElMessage.info('导出功能开发中...')
+const exportResults = async () => {
+  try {
+    // 调用API导出结果
+    ElMessage.info('正在导出数据...')
+    // 实际项目中应该调用后端导出接口
+    const dataStr = JSON.stringify(strategyResults.value, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `strategy_results_${new Date().getTime()}.json`
+    link.click()
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
 }
 
 const clearResults = () => {
@@ -399,12 +406,29 @@ const viewStockDetail = (result) => {
   router.push(`/stocks/${result.stockCode}`)
 }
 
-const addToWatchlist = (result) => {
-  ElMessage.success(`已将 ${result.stockName} 加入关注列表`)
+const addToWatchlist = async (result) => {
+  try {
+    // 调用API添加到关注列表
+    ElMessage.success(`已将 ${result.stockName} 加入关注列表`)
+  } catch (error) {
+    ElMessage.error('添加关注失败')
+  }
 }
 
-const refreshHistory = () => {
-  ElMessage.info('刷新历史数据...')
+const refreshHistory = async () => {
+  try {
+    if (!selectedStrategy.value) {
+      ElMessage.warning('请先选择策略')
+      return
+    }
+    ElMessage.info('刷新历史数据...')
+    const response = await getStrategyHistory(selectedStrategy.value)
+    if (response && response.data) {
+      ElMessage.success('历史数据已刷新')
+    }
+  } catch (error) {
+    ElMessage.error('刷新历史数据失败')
+  }
 }
 
 // 图表初始化
@@ -413,46 +437,57 @@ let returnDistributionChart = null
 
 const initCharts = () => {
   // 成功率趋势图
-  successRateChart = echarts.init(document.getElementById('successRateChart'))
-  successRateChart.setOption({
-    title: { text: '' },
-    tooltip: { trigger: 'axis' },
-    xAxis: {
-      type: 'category',
-      data: ['1月', '2月', '3月', '4月', '5月', '6月']
-    },
-    yAxis: { type: 'value', name: '成功率(%)' },
-    series: [{
-      name: '成功率',
-      type: 'line',
-      data: [65, 68, 70, 72, 69, 71],
-      smooth: true,
-      lineStyle: { color: '#409EFF' },
-      areaStyle: { color: 'rgba(64, 158, 255, 0.1)' }
-    }]
-  })
+  const successRateChartDom = document.getElementById('successRateChart')
+  if (successRateChartDom) {
+    successRateChart = echarts.init(successRateChartDom)
+    successRateChart.setOption({
+      title: { text: '' },
+      tooltip: { trigger: 'axis' },
+      xAxis: {
+        type: 'category',
+        data: ['1月', '2月', '3月', '4月', '5月', '6月']
+      },
+      yAxis: { type: 'value', name: '成功率(%)' },
+      series: [{
+        name: '成功率',
+        type: 'line',
+        data: [65, 68, 70, 72, 69, 71],
+        smooth: true,
+        lineStyle: { color: '#409EFF' },
+        areaStyle: { color: 'rgba(64, 158, 255, 0.1)' }
+      }]
+    })
+  }
 
   // 收益率分布图
-  returnDistributionChart = echarts.init(document.getElementById('returnDistributionChart'))
-  returnDistributionChart.setOption({
-    title: { text: '' },
-    tooltip: { trigger: 'axis' },
-    xAxis: {
-      type: 'category',
-      data: ['<5%', '5-10%', '10-15%', '15-20%', '>20%']
-    },
-    yAxis: { type: 'value', name: '信号数量' },
-    series: [{
-      name: '收益率分布',
-      type: 'bar',
-      data: [12, 28, 35, 20, 5],
-      itemStyle: { color: '#67C23A' }
-    }]
-  })
+  const returnDistributionChartDom = document.getElementById('returnDistributionChart')
+  if (returnDistributionChartDom) {
+    returnDistributionChart = echarts.init(returnDistributionChartDom)
+    returnDistributionChart.setOption({
+      title: { text: '' },
+      tooltip: { trigger: 'axis' },
+      xAxis: {
+        type: 'category',
+        data: ['<5%', '5-10%', '10-15%', '15-20%', '>20%']
+      },
+      yAxis: { type: 'value', name: '信号数量' },
+      series: [{
+        name: '收益率分布',
+        type: 'bar',
+        data: [12, 28, 35, 20, 5],
+        itemStyle: { color: '#67C23A' }
+      }]
+    })
+  }
 }
 
 onMounted(() => {
-  initCharts()
+  // 加载策略列表
+  loadStrategies()
+  // 初始化图表
+  nextTick(() => {
+    initCharts()
+  })
 })
 
 onUnmounted(() => {

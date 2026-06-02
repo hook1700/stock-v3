@@ -25,6 +25,7 @@ class DatabaseWriter:
             'dbname': dbname
         }
         self._test_connection()
+        self._init_tables()
 
     def _test_connection(self):
         """测试数据库连接"""
@@ -35,6 +36,175 @@ class DatabaseWriter:
         except Exception as e:
             logger.error(f"数据库连接失败: {e}")
             raise
+
+    def _init_tables(self):
+        """初始化数据库表 - 与 models.go 定义的表结构匹配"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 1. stocks 表 - 对应 models.go Stock 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS stocks (
+                    id SERIAL PRIMARY KEY,
+                    code VARCHAR(20) UNIQUE NOT NULL,
+                    name VARCHAR(100),
+                    industry VARCHAR(100),
+                    market VARCHAR(10),
+                    listing_date DATE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 2. stock_daily_data 表 - 对应 models.go StockDailyData 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS stock_daily_data (
+                    id SERIAL PRIMARY KEY,
+                    stock_code VARCHAR(20) NOT NULL,
+                    trade_date DATE NOT NULL,
+                    open_price DECIMAL(10,3),
+                    high_price DECIMAL(10,3),
+                    low_price DECIMAL(10,3),
+                    close_price DECIMAL(10,3),
+                    volume BIGINT,
+                    amount DECIMAL(15,2),
+                    turnover_rate DECIMAL(8,4),
+                    pe_ratio DECIMAL(10,4),
+                    pb_ratio DECIMAL(10,4),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(stock_code, trade_date)
+                )
+            """)
+
+            # 3. technical_indicators 表 - 对应 models.go TechnicalIndicator 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS technical_indicators (
+                    id SERIAL PRIMARY KEY,
+                    stock_code VARCHAR(20) NOT NULL,
+                    trade_date DATE NOT NULL,
+                    ma5 DECIMAL(10,3),
+                    ma10 DECIMAL(10,3),
+                    ma20 DECIMAL(10,3),
+                    ma60 DECIMAL(10,3),
+                    volume_ma5 BIGINT,
+                    volume_ma10 BIGINT,
+                    rsi DECIMAL(8,4),
+                    macd DECIMAL(10,4),
+                    kdjk DECIMAL(8,4),
+                    kdjd DECIMAL(8,4),
+                    kdjj DECIMAL(8,4),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(stock_code, trade_date)
+                )
+            """)
+
+            # 4. strategies 表 - 对应 models.go Strategy 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS strategies (
+                    id SERIAL PRIMARY KEY,
+                    strategy_id VARCHAR(50) UNIQUE NOT NULL,
+                    name VARCHAR(100),
+                    strategy_type VARCHAR(20),
+                    description TEXT,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    parameters JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 5. strategy_results 表 - 对应 models.go StrategyResult 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS strategy_results (
+                    id SERIAL PRIMARY KEY,
+                    strategy_id VARCHAR(50) NOT NULL,
+                    strategy_type VARCHAR(20),
+                    trade_date DATE NOT NULL,
+                    stock_code VARCHAR(20) NOT NULL,
+                    score DECIMAL(8,4),
+                    buy_price DECIMAL(10,3),
+                    stop_loss_price DECIMAL(10,3),
+                    take_profit_price DECIMAL(10,3),
+                    logic_description TEXT,
+                    indicators JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 6. sector_fund_flow 表 - 对应 models.go SectorFundFlow 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sector_fund_flow (
+                    id SERIAL PRIMARY KEY,
+                    sector_name VARCHAR(100) NOT NULL,
+                    trade_date DATE NOT NULL,
+                    net_inflow DECIMAL(15,2),
+                    main_net_inflow DECIMAL(15,2),
+                    retail_net_inflow DECIMAL(15,2),
+                    turnover_rate DECIMAL(8,4),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(sector_name, trade_date)
+                )
+            """)
+
+            # 7. user_operations 表 - 对应 models.go UserOperation 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_operations (
+                    id SERIAL PRIMARY KEY,
+                    user_id VARCHAR(50),
+                    operation_type VARCHAR(50),
+                    parameters JSONB,
+                    result_count INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 8. financial_data 表 - 对应 models.go FinancialData 模型
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS financial_data (
+                    id SERIAL PRIMARY KEY,
+                    stock_code VARCHAR(20) NOT NULL,
+                    quarter VARCHAR(10) NOT NULL,
+                    report_date DATE,
+                    roe DECIMAL(8,4),
+                    roa DECIMAL(8,4),
+                    gross_margin DECIMAL(8,4),
+                    net_margin DECIMAL(8,4),
+                    revenue_growth DECIMAL(8,4),
+                    profit_growth DECIMAL(8,4),
+                    last_quarter_growth DECIMAL(8,4),
+                    debt_ratio DECIMAL(8,4),
+                    current_ratio DECIMAL(8,4),
+                    cash_flow DECIMAL(15,2),
+                    dividend_yield DECIMAL(8,4),
+                    pe DECIMAL(10,4),
+                    pb DECIMAL(10,4),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(stock_code, quarter)
+                )
+            """)
+
+            # 创建索引以提升查询性能
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_daily_data_code_date ON stock_daily_data(stock_code, trade_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_technical_indicators_code_date ON technical_indicators(stock_code, trade_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_strategy_results_date ON strategy_results(trade_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_strategy_results_stock ON strategy_results(stock_code)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sector_fund_flow_date ON sector_fund_flow(trade_date)")
+
+            conn.commit()
+            logger.info("数据库表初始化完成")
+
+        except Exception as e:
+            logger.error(f"初始化数据库表失败: {e}")
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -90,7 +260,7 @@ class DatabaseWriter:
                 conn.close()
 
     def save_stock_daily_data(self, stock_code: str, daily_data: pd.DataFrame):
-        """保存股票日线数据"""
+        """保存股票日线数据 - 与 models.go StockDailyData 匹配"""
         if daily_data.empty:
             logger.warning(f"股票 {stock_code} 日线数据为空，跳过保存")
             return
@@ -99,6 +269,9 @@ class DatabaseWriter:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # 确保列名与 models.go 匹配
+            # models.go: StockCode, TradeDate, OpenPrice, HighPrice, LowPrice, 
+            #            ClosePrice, Volume, Amount, TurnoverRate, PERatio, PBRatio
             sql = """
             INSERT INTO stock_daily_data
             (stock_code, trade_date, open_price, high_price, low_price, close_price,
@@ -120,27 +293,110 @@ class DatabaseWriter:
             current_time = datetime.now()
 
             for _, row in daily_data.iterrows():
+                # 处理日期格式 - 支持 datetime 或 string
+                trade_date = row.get('date')
+                if trade_date is None:
+                    continue
+                if isinstance(trade_date, str):
+                    trade_date = datetime.strptime(trade_date, '%Y-%m-%d').date() if len(trade_date) == 10 else datetime.strptime(trade_date, '%Y%m%d').date()
+                elif hasattr(trade_date, 'date'):
+                    trade_date = trade_date.date()
+
                 data.append((
                     stock_code,
-                    row.get('date'),
-                    row.get('open', 0),
-                    row.get('high', 0),
-                    row.get('low', 0),
-                    row.get('close', 0),
-                    row.get('volume', 0),
-                    row.get('amount', 0),
-                    row.get('turnover_rate', 0),
-                    row.get('pe_ratio', 0),
-                    row.get('pb_ratio', 0),
+                    trade_date,
+                    float(row.get('open', 0) or 0),
+                    float(row.get('high', 0) or 0),
+                    float(row.get('low', 0) or 0),
+                    float(row.get('close', 0) or 0),
+                    int(row.get('volume', 0) or 0),
+                    float(row.get('amount', 0) or 0),
+                    float(row.get('turnover', row.get('turnover_rate', 0)) or 0),  # 支持 turnover 或 turnover_rate
+                    float(row.get('pe_ratio', 0) or 0),
+                    float(row.get('pb_ratio', 0) or 0),
                     current_time
                 ))
 
-            execute_values(cursor, sql, data)
-            conn.commit()
-            logger.info(f"成功保存股票 {stock_code} 的 {len(daily_data)} 条日线数据")
+            if data:
+                execute_values(cursor, sql, data, page_size=1000)
+                conn.commit()
+                logger.info(f"成功保存股票 {stock_code} 的 {len(data)} 条日线数据")
 
         except Exception as e:
             logger.error(f"保存股票 {stock_code} 日线数据失败: {e}")
+            if conn:
+                conn.rollback()
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def save_technical_indicators(self, stock_code: str, indicators_data: pd.DataFrame):
+        """保存技术指标数据 - 与 models.go TechnicalIndicator 匹配"""
+        if indicators_data.empty:
+            logger.warning(f"股票 {stock_code} 技术指标数据为空，跳过保存")
+            return
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            sql = """
+            INSERT INTO technical_indicators
+            (stock_code, trade_date, ma5, ma10, ma20, ma60, 
+             volume_ma5, volume_ma10, rsi, macd, kdjk, kdjd, kdjj, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (stock_code, trade_date) DO UPDATE SET
+                ma5 = EXCLUDED.ma5,
+                ma10 = EXCLUDED.ma10,
+                ma20 = EXCLUDED.ma20,
+                ma60 = EXCLUDED.ma60,
+                volume_ma5 = EXCLUDED.volume_ma5,
+                volume_ma10 = EXCLUDED.volume_ma10,
+                rsi = EXCLUDED.rsi,
+                macd = EXCLUDED.macd,
+                kdjk = EXCLUDED.kdjk,
+                kdjd = EXCLUDED.kdjd,
+                kdjj = EXCLUDED.kdjj
+            """
+
+            data = []
+            current_time = datetime.now()
+
+            for _, row in indicators_data.iterrows():
+                trade_date = row.get('date')
+                if trade_date is None:
+                    continue
+                if isinstance(trade_date, str):
+                    trade_date = datetime.strptime(trade_date, '%Y-%m-%d').date() if len(trade_date) == 10 else datetime.strptime(trade_date, '%Y%m%d').date()
+                elif hasattr(trade_date, 'date'):
+                    trade_date = trade_date.date()
+
+                data.append((
+                    stock_code,
+                    trade_date,
+                    float(row.get('ma5', 0) or 0),
+                    float(row.get('ma10', 0) or 0),
+                    float(row.get('ma20', 0) or 0),
+                    float(row.get('ma60', 0) or 0),
+                    int(row.get('volume_ma5', 0) or 0),
+                    int(row.get('volume_ma10', 0) or 0),
+                    float(row.get('rsi', 0) or 0),
+                    float(row.get('macd', 0) or 0),
+                    float(row.get('kdjk', 0) or 0),
+                    float(row.get('kdjd', 0) or 0),
+                    float(row.get('kdjj', 0) or 0),
+                    current_time
+                ))
+
+            if data:
+                execute_values(cursor, sql, data, page_size=1000)
+                conn.commit()
+                logger.info(f"成功保存股票 {stock_code} 的 {len(data)} 条技术指标数据")
+
+        except Exception as e:
+            logger.error(f"保存股票 {stock_code} 技术指标失败: {e}")
             if conn:
                 conn.rollback()
         finally:

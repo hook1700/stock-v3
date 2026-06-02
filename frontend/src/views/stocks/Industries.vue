@@ -138,49 +138,73 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import { getIndustries } from '../../api/index.js'
 
 const loading = ref(false)
 const selectedIndustry = ref(null)
 
 const industryStats = ref({
-  totalIndustries: 35,
-  avgChangeRate: 1.23,
-  risingIndustries: 22,
-  fallingIndustries: 13
+  totalIndustries: 0,
+  avgChangeRate: 0,
+  risingIndustries: 0,
+  fallingIndustries: 0
 })
 
-const industryList = ref([
-  { name: '新能源', stockCount: 156, changeRate: 0.032, totalAmount: 12500000000 },
-  { name: '半导体', stockCount: 132, changeRate: 0.028, totalAmount: 8900000000 },
-  { name: '医药', stockCount: 198, changeRate: -0.012, totalAmount: 6700000000 },
-  { name: '消费', stockCount: 145, changeRate: 0.015, totalAmount: 5400000000 },
-  { name: '金融', stockCount: 87, changeRate: -0.008, totalAmount: 3200000000 },
-  { name: '科技', stockCount: 112, changeRate: 0.041, totalAmount: 7800000000 },
-  { name: '房地产', stockCount: 67, changeRate: -0.025, totalAmount: 2100000000 },
-  { name: '传媒', stockCount: 54, changeRate: 0.019, totalAmount: 1800000000 }
-])
-
-const generateTopStocks = (industryName, count) => {
-  return Array.from({ length: count }, (_, i) => ({
-    code: `000${(i + 1).toString().padStart(3, '0')}`,
-    name: `${industryName}股票${i + 1}`,
-    closePrice: 10 + Math.random() * 90,
-    changeRate: (Math.random() - 0.5) * 0.1,
-    marketCap: Math.random() * 5000000000 + 500000000
-  }))
-}
+const industryList = ref([])
 
 let distributionChart = null
 let marketCapChart = null
 
+// 加载行业列表
+const loadIndustries = async () => {
+  try {
+    loading.value = true
+    const response = await getIndustries()
+    
+    if (response && response.data) {
+      const industries = response.data || []
+      
+      // 转换为前端需要的格式
+      industryList.value = industries.map(item => ({
+        name: typeof item === 'string' ? item : (item.name || item.industry_name || ''),
+        stockCount: item.stock_count || item.stockCount || 0,
+        changeRate: item.change_rate || item.changeRate || 0,
+        totalAmount: item.total_amount || item.totalAmount || 0
+      }))
+      
+      industryStats.value.totalIndustries = industryList.value.length
+      
+      // 计算上涨和下跌行业数
+      industryStats.value.risingIndustries = industryList.value.filter(i => i.changeRate > 0).length
+      industryStats.value.fallingIndustries = industryList.value.filter(i => i.changeRate < 0).length
+      
+      // 计算平均涨跌幅
+      if (industryList.value.length > 0) {
+        const totalChange = industryList.value.reduce((sum, i) => sum + i.changeRate, 0)
+        industryStats.value.avgChangeRate = (totalChange / industryList.value.length * 100).toFixed(2)
+      }
+      
+      // 自动选择第一个行业
+      if (industryList.value.length > 0) {
+        selectIndustry(industryList.value[0])
+      }
+    }
+  } catch (error) {
+    console.error('加载行业列表失败:', error)
+    ElMessage.error('加载行业列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 const selectIndustry = (row) => {
   selectedIndustry.value = {
     ...row,
-    topStocks: generateTopStocks(row.name, 10)
+    topStocks: [] // 后面可以通过API加载
   }
   nextTick(() => {
     initCharts()
@@ -191,43 +215,60 @@ const initCharts = () => {
   if (!selectedIndustry.value) return
 
   // 涨跌幅分布图
-  distributionChart = echarts.init(document.getElementById('industryDistributionChart'))
-  distributionChart.setOption({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: ['>5%', '3-5%', '1-3%', '0-1%', '-1-0%', '-3至-1%', '-5至-3%', '<-5%'] },
-    yAxis: { type: 'value', name: '股票数量' },
-    series: [{
-      type: 'bar',
-      data: [5, 12, 28, 35, 20, 15, 8, 3],
-      itemStyle: { color: '#409EFF' }
-    }]
-  })
+  const distributionChartDom = document.getElementById('industryDistributionChart')
+  if (distributionChartDom) {
+    if (distributionChart) {
+      distributionChart.dispose()
+    }
+    distributionChart = echarts.init(distributionChartDom)
+    distributionChart.setOption({
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'category', data: ['>5%', '3-5%', '1-3%', '0-1%', '-1-0%', '-3至-1%', '-5至-3%', '<-5%'] },
+      yAxis: { type: 'value', name: '股票数量' },
+      series: [{
+        type: 'bar',
+        data: [5, 12, 28, 35, 20, 15, 8, 3],
+        itemStyle: { color: '#409EFF' }
+      }]
+    })
+  }
 
   // 市值分布图
-  marketCapChart = echarts.init(document.getElementById('industryMarketCapChart'))
-  marketCapChart.setOption({
-    tooltip: { trigger: 'item' },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      data: [
-        { value: 35, name: '大盘股 (>500亿)' },
-        { value: 45, name: '中盘股 (100-500亿)' },
-        { value: 76, name: '小盘股 (<100亿)' }
-      ]
-    }]
-  })
+  const marketCapChartDom = document.getElementById('industryMarketCapChart')
+  if (marketCapChartDom) {
+    if (marketCapChart) {
+      marketCapChart.dispose()
+    }
+    marketCapChart = echarts.init(marketCapChartDom)
+    marketCapChart.setOption({
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '70%'],
+        data: [
+          { value: 35, name: '大盘股 (>500亿)' },
+          { value: 45, name: '中盘股 (100-500亿)' },
+          { value: 76, name: '小盘股 (<100亿)' }
+        ]
+      }]
+    })
+  }
 }
 
-const refreshData = () => {
+const refreshData = async () => {
   loading.value = true
-  setTimeout(() => {
-    loading.value = false
+  try {
+    await loadIndustries()
     ElMessage.success('数据已刷新')
-  }, 500)
+  } catch (error) {
+    ElMessage.error('刷新数据失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const formatAmount = (amount) => {
+  if (!amount) return '0'
   if (amount >= 100000000) {
     return `${(amount / 100000000).toFixed(1)}亿`
   } else if (amount >= 10000) {
@@ -237,7 +278,16 @@ const formatAmount = (amount) => {
 }
 
 onMounted(() => {
-  selectIndustry(industryList.value[0])
+  loadIndustries()
+})
+
+onUnmounted(() => {
+  if (distributionChart) {
+    distributionChart.dispose()
+  }
+  if (marketCapChart) {
+    marketCapChart.dispose()
+  }
 })
 </script>
 

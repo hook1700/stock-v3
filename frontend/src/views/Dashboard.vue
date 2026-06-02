@@ -145,75 +145,59 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getStrategies, runStrategy as runStrategyApi, getSectorFundFlow, getFundFlowSummary } from '../api/index.js'
 
-// 模拟数据
+// 数据
 const metrics = ref({
-  totalStocks: 4521,
-  todaySignals: 127,
-  successRate: 68.5,
-  avgProfit: 12.3
+  totalStocks: 0,
+  todaySignals: 0,
+  successRate: 0,
+  avgProfit: 0
 })
 
-const strategyResults = ref([
-  {
-    strategyId: 'short_term_1',
-    strategyName: '均线回踩低吸',
-    signalsCount: 23,
-    avgScore: 4.2,
-    lastRunTime: '2026-06-01 18:00:00'
-  },
-  {
-    strategyId: 'short_term_2',
-    strategyName: '突破缩量回踩',
-    signalsCount: 18,
-    avgScore: 3.8,
-    lastRunTime: '2026-06-01 18:00:00'
-  },
-  {
-    strategyId: 'short_term_3',
-    strategyName: '强势股10日线反抽',
-    signalsCount: 15,
-    avgScore: 4.0,
-    lastRunTime: '2026-06-01 18:00:00'
-  }
-])
-
-const fundFlowData = ref([
-  { name: '新能源', netInflow: 1250000000 },
-  { name: '半导体', netInflow: 890000000 },
-  { name: '医药', netInflow: 670000000 },
-  { name: '消费', netInflow: -320000000 },
-  { name: '金融', netInflow: -150000000 }
-])
-
-const recentSignals = ref([
-  {
-    id: 1,
-    stockCode: '000001',
-    stockName: '平安银行',
-    strategyName: '均线回踩低吸',
-    action: '买入',
-    time: '18:05:23'
-  },
-  {
-    id: 2,
-    stockCode: '600036',
-    stockName: '招商银行',
-    strategyName: '高股息红利',
-    action: '持有',
-    time: '18:04:15'
-  },
-  {
-    id: 3,
-    stockCode: '000858',
-    stockName: '五粮液',
-    strategyName: '突破缩量回踩',
-    action: '买入',
-    time: '18:03:42'
-  }
-])
+const strategyResults = ref([])
+const fundFlowData = ref([])
+const recentSignals = ref([])
 
 // 方法
+const loadDashboardData = async () => {
+  try {
+    // 获取策略列表
+    const strategiesResponse = await getStrategies()
+    if (strategiesResponse && strategiesResponse.data) {
+      strategyResults.value = strategiesResponse.data.map(item => ({
+        strategyId: item.id || item.strategy_id,
+        strategyName: item.name || item.strategy_name,
+        signalsCount: item.signals_count || 0,
+        avgScore: item.avg_score || 0,
+        lastRunTime: item.last_run_time || '--'
+      }))
+      metrics.value.totalStocks = strategiesResponse.data.length
+    }
+
+    // 获取资金流数据
+    const fundFlowResponse = await getSectorFundFlow()
+    if (fundFlowResponse && fundFlowResponse.data) {
+      fundFlowData.value = fundFlowResponse.data.map(item => ({
+        name: item.sector_name || item.name,
+        netInflow: item.net_inflow || item.netInflow || 0
+      }))
+    }
+
+    // 获取资金流摘要
+    const summaryResponse = await getFundFlowSummary()
+    if (summaryResponse && summaryResponse.data) {
+      metrics.value.todaySignals = summaryResponse.data.today_signals || 0
+      metrics.value.successRate = summaryResponse.data.success_rate || 0
+      metrics.value.avgProfit = summaryResponse.data.avg_profit || 0
+    }
+
+  } catch (error) {
+    console.error('加载仪表盘数据失败:', error)
+    ElMessage.error('加载数据失败')
+  }
+}
+
 const runAllStrategies = async () => {
   try {
     await ElMessageBox.confirm('确定要执行所有策略吗？', '提示', {
@@ -223,9 +207,19 @@ const runAllStrategies = async () => {
     })
 
     ElMessage.info('开始执行所有策略...')
-    // 调用API执行策略
-    // await api.runAllStrategies()
-    ElMessage.success('策略执行完成')
+    
+    // 依次执行所有策略
+    for (const strategy of strategyResults.value) {
+      try {
+        await runStrategyApi(strategy.strategyId)
+      } catch (err) {
+        console.error(`策略 ${strategy.strategyName} 执行失败:`, err)
+      }
+    }
+    
+    ElMessage.success('所有策略执行完成')
+    // 重新加载数据
+    await loadDashboardData()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('策略执行失败')
@@ -236,25 +230,40 @@ const runAllStrategies = async () => {
 const runStrategy = async (strategyId) => {
   try {
     ElMessage.info(`开始执行策略: ${strategyId}`)
-    // 调用API执行单个策略
-    // await api.runStrategy(strategyId)
+    await runStrategyApi(strategyId)
     ElMessage.success('策略执行完成')
+    // 重新加载数据
+    await loadDashboardData()
   } catch (error) {
     ElMessage.error('策略执行失败')
   }
 }
 
-const refreshFundFlow = () => {
-  ElMessage.info('刷新资金流数据...')
-  // 调用API刷新数据
+const refreshFundFlow = async () => {
+  try {
+    ElMessage.info('刷新资金流数据...')
+    const response = await getSectorFundFlow()
+    if (response && response.data) {
+      fundFlowData.value = response.data.map(item => ({
+        name: item.sector_name || item.name,
+        netInflow: item.net_inflow || item.netInflow || 0
+      }))
+    }
+    ElMessage.success('资金流数据已刷新')
+  } catch (error) {
+    ElMessage.error('刷新资金流数据失败')
+  }
 }
 
 const viewAllSignals = () => {
   // 跳转到信号页面
+  ElMessage.info('跳转到信号页面...')
 }
 
 const getFlowWidth = (amount) => {
+  if (fundFlowData.value.length === 0) return '0%'
   const maxAmount = Math.max(...fundFlowData.value.map(s => Math.abs(s.netInflow)))
+  if (maxAmount === 0) return '0%'
   const percentage = (Math.abs(amount) / maxAmount) * 100
   return `${Math.min(percentage, 100)}%`
 }
@@ -279,7 +288,7 @@ const getSignalType = (action) => {
 
 onMounted(() => {
   // 初始化数据
-  // loadDashboardData()
+  loadDashboardData()
 })
 </script>
 

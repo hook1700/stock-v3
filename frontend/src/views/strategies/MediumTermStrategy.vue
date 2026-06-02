@@ -1,3 +1,4 @@
+
 <template>
   <div class="strategy-page">
     <div class="page-header">
@@ -10,7 +11,7 @@
       <template #header>
         <div class="card-header">
           <span>选择中线策略</span>
-          <el-button type="primary" @click="runAllStrategies">执行所有策略</el-button>
+          <el-button type="primary" @click="runAllStrategies" :loading="loading">执行所有策略</el-button>
         </div>
       </template>
 
@@ -34,7 +35,7 @@
                 <el-button type="primary" size="small" @click="selectStrategy(strategy.id)">
                   {{ selectedStrategy === strategy.id ? '已选择' : '选择' }}
                 </el-button>
-                <el-button type="success" size="small" @click="runStrategy(strategy.id)">执行策略</el-button>
+                <el-button type="success" size="small" @click="runStrategy(strategy.id)" :loading="loading">执行策略</el-button>
               </div>
             </div>
           </el-card>
@@ -80,24 +81,24 @@
         </div>
       </template>
       <el-table :data="strategyResults" v-loading="loading" stripe>
-        <el-table-column prop="stockCode" label="股票代码" width="100" />
-        <el-table-column prop="stockName" label="股票名称" width="120" />
-        <el-table-column prop="strategyName" label="策略名称" width="150" />
+        <el-table-column prop="stock_code" label="股票代码" width="100" />
+        <el-table-column prop="stock_name" label="股票名称" width="120" />
+        <el-table-column prop="strategy_name" label="策略名称" width="150" />
         <el-table-column prop="score" label="评分" width="80" sortable>
           <template #default="{ row }">
             <el-rate v-model="row.score" disabled show-score text-color="#ff9900" score-template="{value}" />
           </template>
         </el-table-column>
-        <el-table-column prop="buyPrice" label="买入价" width="100">
-          <template #default="{ row }">{{ row.buyPrice.toFixed(2) }}</template>
+        <el-table-column prop="buy_price" label="买入价" width="100">
+          <template #default="{ row }">{{ row.buy_price?.toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="stopLossPrice" label="止损价" width="100">
-          <template #default="{ row }">{{ row.stopLossPrice.toFixed(2) }}</template>
+        <el-table-column prop="stop_loss_price" label="止损价" width="100">
+          <template #default="{ row }">{{ row.stop_loss_price?.toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="takeProfitPrice" label="止盈价" width="100">
-          <template #default="{ row }">{{ row.takeProfitPrice.toFixed(2) }}</template>
+        <el-table-column prop="take_profit_price" label="止盈价" width="100">
+          <template #default="{ row }">{{ row.take_profit_price?.toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="logicDescription" label="逻辑说明" min-width="200" />
+        <el-table-column prop="logic_description" label="逻辑说明" min-width="200" />
       </el-table>
       <div class="results-summary">
         <el-row :gutter="20">
@@ -132,8 +133,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { strategyApi } from '@/services/api'
 
 const strategies = ref([
   {
@@ -174,11 +176,11 @@ const avgScore = computed(() => strategyResults.value.length === 0 ? 0 : strateg
 const highScoreSignals = computed(() => strategyResults.value.filter(r => r.score >= 0.8).length)
 const expectedReturn = computed(() => {
   if (strategyResults.value.length === 0) return 0
-  return strategyResults.value.map(r => (r.takeProfitPrice - r.buyPrice) / r.buyPrice * 100).reduce((a, b) => a + b, 0) / strategyResults.value.length
+  return strategyResults.value.map(r => (r.take_profit_price - r.buy_price) / r.buy_price * 100).reduce((a, b) => a + b, 0) / strategyResults.value.length
 })
 const riskRewardRatio = computed(() => {
   if (strategyResults.value.length === 0) return 0
-  return strategyResults.value.map(r => (r.takeProfitPrice - r.buyPrice) / (r.buyPrice - r.stopLossPrice)).reduce((a, b) => a + b, 0) / strategyResults.value.length
+  return strategyResults.value.map(r => (r.take_profit_price - r.buy_price) / (r.buy_price - r.stop_loss_price)).reduce((a, b) => a + b, 0) / strategyResults.value.length
 })
 
 const selectStrategy = (strategyId) => {
@@ -191,33 +193,82 @@ const getCurrentStrategyParams = () => strategies.value.find(s => s.id === selec
 const runStrategy = async (strategyId) => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    const strategy = strategies.value.find(s => s.id === strategyId)
+    const params = getCurrentStrategyParams().reduce((acc, param) => {
+      acc[param.key] = strategyParameters[param.key] || param.value
+      return acc
+    }, {})
+
+    const response = await strategyApi.executeStrategy({
+      strategy_type: 'medium',
+      strategy_id: strategyId,
+      strategy_name: strategy?.name || '',
+      parameters: params
+    })
+
+    if (response.data && response.data.success) {
+      strategyResults.value = response.data.data || []
+      ElMessage.success(`策略执行完成，生成 ${strategyResults.value.length} 个信号`)
+    } else {
+      throw new Error(response.data?.message || '策略执行失败')
+    }
+  } catch (error) {
+    console.error('策略执行失败:', error)
+    ElMessage.error('策略执行失败: ' + (error.message || '未知错误'))
+    // 如果API调用失败，使用模拟数据作为备选
     const mockResults = Array.from({ length: 12 }, (_, i) => ({
-      id: i + 1, stockCode: `600${(i + 1).toString().padStart(3, '0')}`, stockName: `中线股票${i + 1}`,
-      strategyName: strategies.value.find(s => s.id === strategyId)?.name || '',
-      score: 0.65 + Math.random() * 0.35, buyPrice: 20 + Math.random() * 80,
-      stopLossPrice: 0, takeProfitPrice: 0,
-      logicDescription: '中线趋势确立，基本面改善，符合策略买入条件'
+      id: i + 1,
+      stock_code: `600${(i + 1).toString().padStart(3, '0')}`,
+      stock_name: `中线股票${i + 1}`,
+      strategy_name: strategies.value.find(s => s.id === strategyId)?.name || '',
+      score: 0.65 + Math.random() * 0.35,
+      buy_price: 20 + Math.random() * 80,
+      stop_loss_price: 0,
+      take_profit_price: 0,
+      logic_description: '中线趋势确立，基本面改善，符合策略买入条件'
     }))
-    mockResults.forEach(r => { r.stopLossPrice = r.buyPrice * 0.88; r.takeProfitPrice = r.buyPrice * 1.20 })
+    mockResults.forEach(r => { r.stop_loss_price = r.buy_price * 0.88; r.take_profit_price = r.buy_price * 1.20 })
     strategyResults.value = mockResults
-    ElMessage.success(`策略执行完成，生成 ${mockResults.length} 个信号`)
-  } catch { ElMessage.error('策略执行失败') }
-  finally { loading.value = false }
+    ElMessage.warning('使用模拟数据展示')
+  } finally {
+    loading.value = false
+  }
 }
+
 const runAllStrategies = async () => {
   try {
     await ElMessageBox.confirm('确定要执行所有中线策略吗？', '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    loading.value = true; strategyResults.value = []
-    for (const s of strategies.value) await runStrategy(s.id)
+    loading.value = true
+    strategyResults.value = []
+
+    for (const s of strategies.value) {
+      await runStrategy(s.id)
+    }
     ElMessage.success('所有策略执行完成')
-  } catch (error) { if (error !== 'cancel') ElMessage.error('策略执行失败') }
-  finally { loading.value = false }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('策略执行失败: ' + (error.message || '未知错误'))
+    }
+  } finally {
+    loading.value = false
+  }
 }
+
 const saveParameters = () => ElMessage.success('参数保存成功')
 const resetParameters = () => { selectStrategy(selectedStrategy.value); ElMessage.info('参数已重置') }
 const exportResults = () => ElMessage.info('导出功能开发中...')
 const clearResults = () => { strategyResults.value = []; ElMessage.info('结果已清空') }
+
+onMounted(async () => {
+  try {
+    const response = await strategyApi.getStrategyHistory({ strategy_type: 'medium' })
+    if (response.data && response.data.success && response.data.data) {
+      strategyResults.value = response.data.data.slice(0, 50)
+    }
+  } catch (error) {
+    console.error('获取历史策略结果失败:', error)
+  }
+})
 </script>
 
 <style scoped>

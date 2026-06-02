@@ -1,3 +1,4 @@
+
 <template>
   <div class="settings-page">
     <div class="page-header">
@@ -12,7 +13,7 @@
           <template #header>
             <div class="card-header"><span>基本设置</span></div>
           </template>
-          <el-form :model="basicSettings" label-width="140px">
+          <el-form :model="basicSettings" label-width="140px" v-loading="basicLoading">
             <el-form-item label="系统名称">
               <el-input v-model="basicSettings.systemName" />
             </el-form-item>
@@ -41,7 +42,7 @@
               </el-radio-group>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="saveBasicSettings">保存设置</el-button>
+              <el-button type="primary" @click="saveBasicSettings" :loading="basicLoading">保存设置</el-button>
               <el-button @click="resetBasicSettings">重置</el-button>
             </el-form-item>
           </el-form>
@@ -54,7 +55,7 @@
           <template #header>
             <div class="card-header"><span>通知设置</span></div>
           </template>
-          <el-form :model="notificationSettings" label-width="140px">
+          <el-form :model="notificationSettings" label-width="140px" v-loading="notifyLoading">
             <el-form-item label="启用策略通知">
               <el-switch v-model="notificationSettings.strategyNotify" />
             </el-form-item>
@@ -75,7 +76,7 @@
               <el-switch v-model="notificationSettings.abnormalAlert" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="saveNotifySettings">保存设置</el-button>
+              <el-button type="primary" @click="saveNotifySettings" :loading="notifyLoading">保存设置</el-button>
               <el-button @click="resetNotifySettings">重置</el-button>
             </el-form-item>
           </el-form>
@@ -88,7 +89,7 @@
       <template #header>
         <div class="card-header"><span>数据采集设置</span></div>
       </template>
-      <el-form :model="dataSettings" label-width="140px">
+      <el-form :model="dataSettings" label-width="140px" v-loading="dataLoading">
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="日线数据更新">
@@ -123,7 +124,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item>
-              <el-button type="primary" @click="saveDataSettings">保存采集设置</el-button>
+              <el-button type="primary" @click="saveDataSettings" :loading="dataLoading">保存采集设置</el-button>
             </el-form-item>
           </el-col>
         </el-row>
@@ -135,7 +136,7 @@
       <template #header>
         <div class="card-header"><span>API 配置</span></div>
       </template>
-      <el-form :model="apiSettings" label-width="140px">
+      <el-form :model="apiSettings" label-width="140px" v-loading="apiLoading">
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="后端API地址">
@@ -156,8 +157,8 @@
           </el-col>
           <el-col :span="12">
             <el-form-item>
-              <el-button type="primary" @click="testApiConnection">测试连接</el-button>
-              <el-button type="primary" @click="saveApiSettings">保存配置</el-button>
+              <el-button type="primary" @click="testApiConnection" :loading="testLoading">测试连接</el-button>
+              <el-button type="primary" @click="saveApiSettings" :loading="apiLoading">保存配置</el-button>
             </el-form-item>
           </el-col>
         </el-row>
@@ -170,25 +171,32 @@
         <div class="card-header"><span>系统信息</span></div>
       </template>
       <el-descriptions :column="3" border>
-        <el-descriptions-item label="系统版本">v1.0.0</el-descriptions-item>
-        <el-descriptions-item label="前端框架">Vue 3 + Vite</el-descriptions-item>
-        <el-descriptions-item label="UI组件库">Element Plus</el-descriptions-item>
-        <el-descriptions-item label="后端语言">Go 1.19+</el-descriptions-item>
-        <el-descriptions-item label="数据库">PostgreSQL 15</el-descriptions-item>
-        <el-descriptions-item label="缓存">Redis 7</el-descriptions-item>
-        <el-descriptions-item label="最后更新">2026-06-01</el-descriptions-item>
-        <el-descriptions-item label="维护者">v_zwhozhang</el-descriptions-item>
-        <el-descriptions-item label="License">MIT</el-descriptions-item>
+        <el-descriptions-item label="系统版本">{{ systemInfo.version }}</el-descriptions-item>
+        <el-descriptions-item label="前端框架">{{ systemInfo.frontendFramework }}</el-descriptions-item>
+        <el-descriptions-item label="UI组件库">{{ systemInfo.uiLibrary }}</el-descriptions-item>
+        <el-descriptions-item label="后端语言">{{ systemInfo.backendLanguage }}</el-descriptions-item>
+        <el-descriptions-item label="数据库">{{ systemInfo.database }}</el-descriptions-item>
+        <el-descriptions-item label="缓存">{{ systemInfo.cache }}</el-descriptions-item>
+        <el-descriptions-item label="最后更新">{{ systemInfo.lastUpdate }}</el-descriptions-item>
+        <el-descriptions-item label="维护者">{{ systemInfo.maintainer }}</el-descriptions-item>
+        <el-descriptions-item label="License">{{ systemInfo.license }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { settingsApi } from '@/services/api'
 
-const basicSettings = ref({
+const basicLoading = ref(false)
+const notifyLoading = ref(false)
+const dataLoading = ref(false)
+const apiLoading = ref(false)
+const testLoading = ref(false)
+
+const basicSettings = reactive({
   systemName: '股票策略分析系统',
   refreshInterval: 30,
   defaultMarket: 'A',
@@ -196,7 +204,7 @@ const basicSettings = ref({
   theme: 'light'
 })
 
-const notificationSettings = ref({
+const notificationSettings = reactive({
   strategyNotify: true,
   notifyChannels: ['web'],
   scoreThreshold: 3.5,
@@ -204,7 +212,7 @@ const notificationSettings = ref({
   abnormalAlert: true
 })
 
-const dataSettings = ref({
+const dataSettings = reactive({
   dailyUpdateTime: new Date(2026, 0, 1, 18, 30),
   realtimeInterval: 5,
   historyRetention: 1095,
@@ -212,22 +220,182 @@ const dataSettings = ref({
   autoFillMissing: true
 })
 
-const apiSettings = ref({
+const apiSettings = reactive({
   baseUrl: 'http://localhost:8080/api',
   apiKey: '',
   timeout: 30
 })
 
-const saveBasicSettings = () => ElMessage.success('基本设置已保存')
-const resetBasicSettings = () => { basicSettings.value = { systemName: '股票策略分析系统', refreshInterval: 30, defaultMarket: 'A', precision: '2', theme: 'light' }; ElMessage.info('已重置') }
-const saveNotifySettings = () => ElMessage.success('通知设置已保存')
-const resetNotifySettings = () => { notificationSettings.value = { strategyNotify: true, notifyChannels: ['web'], scoreThreshold: 3.5, dailySummaryTime: new Date(2026, 0, 1, 18, 0), abnormalAlert: true }; ElMessage.info('已重置') }
-const saveDataSettings = () => ElMessage.success('采集设置已保存')
-const saveApiSettings = () => ElMessage.success('API配置已保存')
-const testApiConnection = () => {
-  ElMessage.info('正在测试连接...')
-  setTimeout(() => ElMessage.success('连接成功'), 1000)
+const systemInfo = reactive({
+  version: 'v1.0.0',
+  frontendFramework: 'Vue 3 + Vite',
+  uiLibrary: 'Element Plus',
+  backendLanguage: 'Go 1.19+',
+  database: 'PostgreSQL 15',
+  cache: 'Redis 7',
+  lastUpdate: '2026-06-01',
+  maintainer: 'v_zwhozhang',
+  license: 'MIT'
+})
+
+const loadAllSettings = async () => {
+  try {
+    const response = await settingsApi.getAllSettings()
+
+    if (response.data && response.data.success) {
+      const data = response.data.data || {}
+
+      // 更新基本设置
+      if (data.basic) {
+        Object.assign(basicSettings, data.basic)
+      }
+
+      // 更新通知设置
+      if (data.notification) {
+        Object.assign(notificationSettings, data.notification)
+      }
+
+      // 更新数据采集设置
+      if (data.data) {
+        Object.assign(dataSettings, data.data)
+      }
+
+      // 更新API配置
+      if (data.api) {
+        Object.assign(apiSettings, data.api)
+      }
+
+      // 更新系统信息
+      if (data.system) {
+        Object.assign(systemInfo, data.system)
+      }
+
+      ElMessage.success('设置加载成功')
+    } else {
+      throw new Error(response.data?.message || '加载失败')
+    }
+  } catch (error) {
+    console.error('加载设置失败:', error)
+    ElMessage.warning('使用本地默认设置')
+    // 使用默认值，不做任何操作
+  }
 }
+
+const saveBasicSettings = async () => {
+  basicLoading.value = true
+  try {
+    const response = await settingsApi.saveBasicSettings(basicSettings)
+
+    if (response.data && response.data.success) {
+      ElMessage.success('基本设置已保存')
+    } else {
+      throw new Error(response.data?.message || '保存失败')
+    }
+  } catch (error) {
+    console.error('保存基本设置失败:', error)
+    ElMessage.error('保存基本设置失败: ' + (error.message || '未知错误'))
+  } finally {
+    basicLoading.value = false
+  }
+}
+
+const resetBasicSettings = () => {
+  Object.assign(basicSettings, {
+    systemName: '股票策略分析系统',
+    refreshInterval: 30,
+    defaultMarket: 'A',
+    precision: '2',
+    theme: 'light'
+  })
+  ElMessage.info('已重置')
+}
+
+const saveNotifySettings = async () => {
+  notifyLoading.value = true
+  try {
+    const response = await settingsApi.saveNotificationSettings(notificationSettings)
+
+    if (response.data && response.data.success) {
+      ElMessage.success('通知设置已保存')
+    } else {
+      throw new Error(response.data?.message || '保存失败')
+    }
+  } catch (error) {
+    console.error('保存通知设置失败:', error)
+    ElMessage.error('保存通知设置失败: ' + (error.message || '未知错误'))
+  } finally {
+    notifyLoading.value = false
+  }
+}
+
+const resetNotifySettings = () => {
+  Object.assign(notificationSettings, {
+    strategyNotify: true,
+    notifyChannels: ['web'],
+    scoreThreshold: 3.5,
+    dailySummaryTime: new Date(2026, 0, 1, 18, 0),
+    abnormalAlert: true
+  })
+  ElMessage.info('已重置')
+}
+
+const saveDataSettings = async () => {
+  dataLoading.value = true
+  try {
+    const response = await settingsApi.saveDataSettings(dataSettings)
+
+    if (response.data && response.data.success) {
+      ElMessage.success('采集设置已保存')
+    } else {
+      throw new Error(response.data?.message || '保存失败')
+    }
+  } catch (error) {
+    console.error('保存采集设置失败:', error)
+    ElMessage.error('保存采集设置失败: ' + (error.message || '未知错误'))
+  } finally {
+    dataLoading.value = false
+  }
+}
+
+const saveApiSettings = async () => {
+  apiLoading.value = true
+  try {
+    const response = await settingsApi.saveApiSettings(apiSettings)
+
+    if (response.data && response.data.success) {
+      ElMessage.success('API配置已保存')
+    } else {
+      throw new Error(response.data?.message || '保存失败')
+    }
+  } catch (error) {
+    console.error('保存API配置失败:', error)
+    ElMessage.error('保存API配置失败: ' + (error.message || '未知错误'))
+  } finally {
+    apiLoading.value = false
+  }
+}
+
+const testApiConnection = async () => {
+  testLoading.value = true
+  try {
+    const response = await settingsApi.testConnection(apiSettings)
+
+    if (response.data && response.data.success) {
+      ElMessage.success('连接成功')
+    } else {
+      throw new Error(response.data?.message || '连接失败')
+    }
+  } catch (error) {
+    console.error('API连接测试失败:', error)
+    ElMessage.error('连接失败: ' + (error.message || '未知错误'))
+  } finally {
+    testLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadAllSettings()
+})
 </script>
 
 <style scoped>

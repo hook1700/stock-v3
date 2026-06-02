@@ -151,12 +151,15 @@ def main():
   init [days]     初始化数据库并采集历史数据（默认30天）
   daily           执行每日数据采集
   history [days]  采集历史数据（默认365天）
+  improved_history [days]  使用改进采集器采集历史数据（默认250天）
+  improved_daily   使用改进采集器执行每日数据采集
   status          检查数据状态
   test            测试数据采集功能
 
 示例:
   python run_data_collection.py init 30    # 初始化并采集30天历史数据
   python run_data_collection.py daily     # 执行每日数据采集
+  python run_data_collection.py improved_history 250  # 使用改进采集器采集250天历史数据
   python run_data_collection.py status     # 检查数据状态
 """)
         return
@@ -175,6 +178,21 @@ def main():
             days = int(sys.argv[2]) if len(sys.argv) > 2 else 365
             run_historical_collection(days)
 
+        elif command == "improved_history":
+            # 使用改进采集器采集历史数据
+            days = int(sys.argv[2]) if len(sys.argv) > 2 else 250
+            from improved_data_collector import collect_historical_data_improved
+            logger.info(f"使用改进采集器采集最近{days}天历史数据...")
+            collect_historical_data_improved(days=days, save_to_db=True)
+            logger.info("改进采集器历史数据采集完成")
+
+        elif command == "improved_daily":
+            # 使用改进采集器执行每日采集
+            from improved_data_collector import collect_daily_data_improved
+            logger.info("使用改进采集器执行每日数据采集...")
+            result = collect_daily_data_improved(save_to_db=True)
+            logger.info(f"改进采集器每日数据采集完成，保存了 {result.get('saved_count', 0)} 只股票数据")
+
         elif command == "status":
             check_data_status()
 
@@ -182,7 +200,8 @@ def main():
             # 测试数据采集功能
             logger.info("开始测试数据采集功能...")
 
-            collector = StockDataCollector()
+            from improved_data_collector import ImprovedDataCollector
+            collector = ImprovedDataCollector()
 
             # 测试获取股票列表
             stocks = collector.get_all_a_stocks()
@@ -204,11 +223,12 @@ def main():
                 else:
                     logger.warning("日线数据测试失败")
 
+            collector.close()
             logger.info("数据采集测试完成")
 
         else:
             logger.error(f"未知命令: {command}")
-            print("请使用 'init', 'daily', 'history', 'status' 或 'test' 命令")
+            print("请使用 'init', 'daily', 'history', 'improved_history', 'improved_daily', 'status' 或 'test' 命令")
 
     except Exception as e:
         logger.error(f"执行命令失败: {e}")
