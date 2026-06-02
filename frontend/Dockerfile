@@ -7,6 +7,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
+# 确保 vite 等有执行权限（修复 Windows 下构建权限问题）
+RUN chmod +x node_modules/.bin/*
+
 # 复制源码
 COPY . .
 
