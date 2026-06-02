@@ -209,8 +209,10 @@
       </div>
     </el-card>
   </div>
+</template>
+
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, DataAnalysis } from '@element-plus/icons-vue'
@@ -225,9 +227,6 @@ const loading = ref(false)
 const selectedStrategy = ref('')
 const strategyParameters = reactive({})
 const strategyResults = ref([])
-const strategyParameters = reactive({})
-const strategyResults = ref([])
-const loading = ref(false)
 
 // 计算属性
 const avgScore = computed(() => {

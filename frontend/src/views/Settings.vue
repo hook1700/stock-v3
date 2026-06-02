@@ -188,7 +188,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { settingsApi } from '@/services/api'
+// 设置页面暂未实现后端API，使用本地数据
 
 const basicLoading = ref(false)
 const notifyLoading = ref(false)

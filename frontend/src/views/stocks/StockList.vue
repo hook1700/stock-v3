@@ -369,11 +369,6 @@ const formatAmount = (amount) => {
   return amount.toFixed(0)
 }
 
-// 初始化行业列表
-const initIndustries = () => {
-  industries.value = [...new Set(mockStocks.map(stock => stock.industry))]
-}
-
 onMounted(() => {
   initIndustries()
   searchStocks()

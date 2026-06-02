@@ -1,4 +1,3 @@
-
 <template>
   <div class="strategy-page">
     <div class="page-header">
@@ -135,7 +134,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { strategyApi } from '@/services/api'
+import { runStrategy as runStrategyApi, getStrategyResults } from '../../api/index.js'
 
 const strategies = ref([
   {
@@ -199,18 +198,15 @@ const runStrategy = async (strategyId) => {
       return acc
     }, {})
 
-    const response = await strategyApi.executeStrategy({
-      strategy_type: 'medium',
-      strategy_id: strategyId,
-      strategy_name: strategy?.name || '',
+const response = await runStrategyApi(strategyId, {
       parameters: params
     })
 
-    if (response.data && response.data.success) {
-      strategyResults.value = response.data.data || []
+    if (response && response.data) {
+      strategyResults.value = response.data.results || []
       ElMessage.success(`策略执行完成，生成 ${strategyResults.value.length} 个信号`)
     } else {
-      throw new Error(response.data?.message || '策略执行失败')
+      throw new Error('策略执行失败')
     }
   } catch (error) {
     console.error('策略执行失败:', error)
@@ -261,9 +257,9 @@ const clearResults = () => { strategyResults.value = []; ElMessage.info('结果�
 
 onMounted(async () => {
   try {
-    const response = await strategyApi.getStrategyHistory({ strategy_type: 'medium' })
-    if (response.data && response.data.success && response.data.data) {
-      strategyResults.value = response.data.data.slice(0, 50)
+    const response = await getStrategyResults('all', { strategy_type: 'medium' })
+    if (response && response.data && response.data.results) {
+      strategyResults.value = response.data.results.slice(0, 50)
     }
   } catch (error) {
     console.error('获取历史策略结果失败:', error)
