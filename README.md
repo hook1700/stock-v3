@@ -252,7 +252,7 @@ python main.py
 
 ## 📞 联系方式
 
-- 项目维护者: v_zwhozhang
+- 项目维护者: 
 - 项目文档: [CLAUDE.md](docs/CLAUDE.md)
 - 部署指南: [DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
